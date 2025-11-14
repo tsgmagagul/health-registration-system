@@ -9,6 +9,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+    experimental: {
+    appDir: true
+  },
+  // prevent static prerender
+  output: 'standalone'
+
 }
 
 export default nextConfig

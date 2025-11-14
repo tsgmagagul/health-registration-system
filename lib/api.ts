@@ -418,7 +418,8 @@ class ApiService {
   }
 
   async getcheckInPatient(patientId: string, visitData: CheckInData): Promise<ApiResponse<CheckInResponse>> {
-    const token = localStorage.getItem('token');
+   const token = localStorage.getItem('authToken');
+
     return this.request<ApiResponse<CheckInResponse>>(`/visits/checkin`, {
       method: 'POST',
       headers: {
@@ -431,7 +432,8 @@ class ApiService {
 
   // Check-in patient - FIXED VERSION
   async checkInPatient(patientId: string, visitData: any): Promise<ApiResponse<CheckInResponse>> {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('authToken');
+
     return this.request<ApiResponse<CheckInResponse>>(`/patients/${patientId}/checkin`, {
       method: 'POST',
       headers: {
