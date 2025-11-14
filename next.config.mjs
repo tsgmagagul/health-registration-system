@@ -9,8 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-    experimental: {
-    appDir: true
+    compiler: {
+    styledComponents: true,
   },
   // prevent static prerender
   output: 'standalone'
