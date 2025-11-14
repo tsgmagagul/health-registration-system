@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "generate-data": "node scripts/generate-data.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -53,6 +54,7 @@
     "react-day-picker": "9.8.0",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.60.0",
+    "react-hot-toast": "^2.6.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "latest",
     "sonner": "^1.7.4",

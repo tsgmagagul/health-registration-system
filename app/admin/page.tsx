@@ -65,27 +65,44 @@ const resourceAllocationData = [
 ]
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"]
-
+interface UserData {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  first_name: string;
+  last_name: string;
+  isAdmin?: boolean; // Make optional if it might not always be present
+}
 export default function AdminDashboard() {
-  const [userData, setUserData] = useState(null)
+   const [userData, setUserData] = useState<UserData | null>(null)
   const router = useRouter()
 
-  useEffect(() => {
+ useEffect(() => {
     const storedData = localStorage.getItem("userData")
     if (storedData) {
-      const data = JSON.parse(storedData)
-      if (!data.isAdmin) {
-        router.push("/dashboard")
-        return
+      try {
+        const data = JSON.parse(storedData) as UserData
+        if (!data.isAdmin) {
+          router.push("/dashboard")
+          return
+        }
+        setUserData(data)
+      } catch (error) {
+        console.error("Error parsing user data:", error)
+        router.push("/login")
       }
-      setUserData(data)
     } else {
       router.push("/login")
     }
   }, [router])
 
   if (!userData) {
-    return <div>Loading...</div>
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg">Loading admin dashboard...</div>
+      </div>
+    )
   }
 
   const totalPatients = provinceData.reduce((sum, province) => sum + province.totalPatients, 0)

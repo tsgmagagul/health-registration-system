@@ -11,7 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, XCircle, User, X } from "lucide-react"
+import { CheckCircle, XCircle, User, X, Loader2, AlertCircle } from "lucide-react"
+import { apiService } from "@/lib/api"
+import type { Patient, ApiResponse, PatientRegistrationResponse } from "@/lib/api"
 
 interface PatientRegistration {
   // Personal Information
@@ -62,7 +64,7 @@ interface PatientRegistration {
 
 const chronicDiseaseOptions = [
   "Diabetes Type 1",
-  "Diabetes Type 2",
+  "Diabetes Type 2", 
   "Hypertension",
   "Asthma",
   "COPD",
@@ -157,6 +159,8 @@ export default function PatientRegistrationPage() {
 
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [currentStep, setCurrentStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [registeredPatient, setRegisteredPatient] = useState<Patient | null>(null)
 
   const handleInputChange = (field: keyof PatientRegistration, value: string | boolean | string[]) => {
     setFormData((prev) => ({
@@ -223,57 +227,135 @@ export default function PatientRegistrationPage() {
     setMessage(null)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const transformFormDataForAPI = (data: PatientRegistration) => {
+    // Prepare chronic diseases list
+    const chronicDiseases = [...data.chronicDiseases];
+    if (data.customChronicDisease && chronicDiseases.includes("Other")) {
+      const index = chronicDiseases.indexOf("Other");
+      chronicDiseases[index] = data.customChronicDisease;
+    }
+
+    // Build address string
+    const addressParts = [
+      data.streetAddress,
+      data.suburb,
+      data.city,
+      data.province,
+      data.postalCode
+    ].filter(Boolean);
+    const address = addressParts.join(', ');
+
+    // Prepare medical history object
+    const medical_history = {
+      employment_status: data.employmentStatus,
+      employer: data.employer || null,
+      occupation: data.occupation || null,
+      work_address: data.workAddress || null,
+      chronic_diseases: chronicDiseases,
+      current_medications: data.currentMedications || null,
+      is_pregnant: data.gender === 'female' ? data.isPregnant : false,
+      pregnancy_weeks: data.isPregnant ? data.pregnancyWeeks : null,
+      race: data.race
+    };
+
+    // Prepare risk factors array
+    const risk_factors = [];
+    if (chronicDiseases.length > 0) {
+      risk_factors.push('chronic_conditions');
+    }
+    if (data.isPregnant) {
+      risk_factors.push('pregnancy');
+    }
+
+    // Prepare allergies array
+    const allergies = data.allergies ? data.allergies.split(',').map(a => a.trim()) : [];
+
+    return {
+      first_name: data.firstName,
+      last_name: data.lastName,
+      date_of_birth: data.dateOfBirth,
+      gender: data.gender,
+      phone: data.cellphoneNumber,
+      email: null, // Not collected in current form
+      address: address,
+      id_number: data.idNumber,
+      emergency_contact_name: data.nextOfKinName,
+      emergency_contact_phone: data.nextOfKinPhone,
+      medical_history: medical_history,
+      allergies: allergies,
+      risk_factors: risk_factors
+    };
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage(null)
+    setLoading(true)
 
     if (!validateStep(5)) {
       setMessage({ type: "error", text: "Please complete all required fields." })
+      setLoading(false)
       return
     }
 
-    // Simulate registration
-    console.log("Patient Registration Data:", formData)
-    setMessage({
-      type: "success",
-      text: `Patient ${formData.firstName} ${formData.lastName} has been successfully registered with ID: ${formData.idNumber}`,
-    })
+    try {
+      // Transform form data to match API expectations
+      const apiData = transformFormDataForAPI(formData);
+      
+      // Call backend API
+        const response = await apiService.registerPatient(apiData) as ApiResponse<PatientRegistrationResponse>;
+      if (response.status === 'success') {
+        setRegisteredPatient(response.data.patient);
+        setMessage({
+          type: "success",
+          text: `Patient ${formData.firstName} ${formData.lastName} has been successfully registered with Patient Number: ${response.data.patient.patient_number}`,
+        })
 
-    // Reset form
-    setFormData({
-      firstName: "",
-      lastName: "",
-      idNumber: "",
-      dateOfBirth: "",
-      gender: "",
-      race: "",
-      cellphoneNumber: "",
-      alternativeNumber: "",
-      streetAddress: "",
-      suburb: "",
-      city: "",
-      province: "",
-      postalCode: "",
-      employmentStatus: "",
-      employer: "",
-      occupation: "",
-      workAddress: "",
-      hasChronicDiseases: false,
-      chronicDiseases: [],
-      customChronicDisease: "",
-      allergies: "",
-      currentMedications: "",
-      isPregnant: false,
-      pregnancyWeeks: "",
-      nextOfKinName: "",
-      nextOfKinRelationship: "",
-      nextOfKinPhone: "",
-      nextOfKinAddress: "",
-      emergencyContactName: "",
-      emergencyContactPhone: "",
-      emergencyContactRelationship: "",
-    })
-    setCurrentStep(1)
+        // Reset form
+        setFormData({
+          firstName: "",
+          lastName: "",
+          idNumber: "",
+          dateOfBirth: "",
+          gender: "",
+          race: "",
+          cellphoneNumber: "",
+          alternativeNumber: "",
+          streetAddress: "",
+          suburb: "",
+          city: "",
+          province: "",
+          postalCode: "",
+          employmentStatus: "",
+          employer: "",
+          occupation: "",
+          workAddress: "",
+          hasChronicDiseases: false,
+          chronicDiseases: [],
+          customChronicDisease: "",
+          allergies: "",
+          currentMedications: "",
+          isPregnant: false,
+          pregnancyWeeks: "",
+          nextOfKinName: "",
+          nextOfKinRelationship: "",
+          nextOfKinPhone: "",
+          nextOfKinAddress: "",
+          emergencyContactName: "",
+          emergencyContactPhone: "",
+          emergencyContactRelationship: "",
+        })
+        setCurrentStep(1)
+      }
+    } catch (error: any) {
+      console.error('Patient registration error:', error);
+      setMessage({
+        type: "error",
+        text: error.message || "Registration failed. Please try again."
+      });
+    } finally {
+      setLoading(false)
+    }
   }
 
   const renderStepIndicator = () => (
@@ -297,6 +379,46 @@ export default function PatientRegistrationPage() {
     </div>
   )
 
+  const renderSuccessCard = () => (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-green-700">
+        <CheckCircle className="w-6 h-6" />
+        <h3 className="text-lg font-semibold">Registration Successful!</h3>
+      </div>
+      
+      {registeredPatient && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+          <p><strong>Patient Number:</strong> {registeredPatient.patient_number}</p>
+          <p><strong>Name:</strong> {registeredPatient.first_name} {registeredPatient.last_name}</p>
+          <p><strong>ID Number:</strong> {registeredPatient.id_number}</p>
+        <p>
+  <strong>Registration Date:</strong>{" "}
+  {new Date(registeredPatient.created_at ?? "").toLocaleDateString()}
+</p>
+
+        </div>
+      )}
+      
+      <div className="flex gap-4">
+        <Button onClick={() => {
+          setMessage(null);
+          setRegisteredPatient(null);
+        }}>
+          Register Another Patient
+        </Button>
+        
+        {registeredPatient && (
+          <Button variant="outline" onClick={() => {
+            // Navigate to check-in page or patient details
+            console.log('Navigate to patient details:', registeredPatient.id);
+          }}>
+            View Patient Details
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <Card>
@@ -308,121 +430,140 @@ export default function PatientRegistrationPage() {
           <CardDescription>Complete patient registration form - Step {currentStep} of 5</CardDescription>
         </CardHeader>
         <CardContent>
-          {renderStepIndicator()}
+          {message && message.type === 'success' && registeredPatient ? (
+            renderSuccessCard()
+          ) : (
+            <>
+              {renderStepIndicator()}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Step 1: Personal Information */}
-            {currentStep === 1 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Personal Information</h3>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Step 1: Personal Information */}
+                {currentStep === 1 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Personal Information</h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name *</Label>
-                    <Input
-                      id="firstName"
-                      value={formData.firstName}
-                      onChange={(e) => handleInputChange("firstName", e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name *</Label>
-                    <Input
-                      id="lastName"
-                      value={formData.lastName}
-                      onChange={(e) => handleInputChange("lastName", e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="idNumber">ID Number *</Label>
-                    <Input
-                      id="idNumber"
-                      value={formData.idNumber}
-                      onChange={(e) => handleInputChange("idNumber", e.target.value)}
-                      placeholder="e.g., 9001015800083"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                    <Input
-                      id="dateOfBirth"
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Gender *</Label>
-                    <RadioGroup value={formData.gender} onValueChange={(value) => handleInputChange("gender", value)}>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="male" id="male" />
-                        <Label htmlFor="male">Male</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName">First Name *</Label>
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) => handleInputChange("firstName", e.target.value)}
+                          disabled={loading}
+                          required
+                        />
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="female" id="female" />
-                        <Label htmlFor="female">Female</Label>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName">Last Name *</Label>
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) => handleInputChange("lastName", e.target.value)}
+                          disabled={loading}
+                          required
+                        />
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="other" id="other" />
-                        <Label htmlFor="other">Other</Label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="idNumber">ID Number *</Label>
+                        <Input
+                          id="idNumber"
+                          value={formData.idNumber}
+                          onChange={(e) => handleInputChange("idNumber", e.target.value)}
+                          placeholder="e.g., 9001015800083"
+                          disabled={loading}
+                          required
+                        />
                       </div>
-                    </RadioGroup>
-                  </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="race">Race</Label>
-                    <Select value={formData.race} onValueChange={(value) => handleInputChange("race", value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select race" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {raceOptions.map((race) => (
-                          <SelectItem key={race} value={race}>
-                            {race}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                        <Input
+                          id="dateOfBirth"
+                          type="date"
+                          value={formData.dateOfBirth}
+                          onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                          disabled={loading}
+                          required
+                        />
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cellphoneNumber">Cellphone Number *</Label>
-                    <Input
-                      id="cellphoneNumber"
-                      value={formData.cellphoneNumber}
-                      onChange={(e) => handleInputChange("cellphoneNumber", e.target.value)}
-                      placeholder="e.g., 0821234567"
-                      required
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Gender *</Label>
+                        <RadioGroup 
+                          value={formData.gender} 
+                          onValueChange={(value) => handleInputChange("gender", value)}
+                          disabled={loading}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="male" id="male" />
+                            <Label htmlFor="male">Male</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="female" id="female" />
+                            <Label htmlFor="female">Female</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="other" id="other" />
+                            <Label htmlFor="other">Other</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="alternativeNumber">Alternative Number</Label>
-                    <Input
-                      id="alternativeNumber"
-                      value={formData.alternativeNumber}
-                      onChange={(e) => handleInputChange("alternativeNumber", e.target.value)}
-                      placeholder="e.g., 0117654321"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+                      <div className="space-y-2">
+                        <Label htmlFor="race">Race</Label>
+                        <Select 
+                          value={formData.race} 
+                          onValueChange={(value) => handleInputChange("race", value)}
+                          disabled={loading}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select race" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {raceOptions.map((race) => (
+                              <SelectItem key={race} value={race}>
+                                {race}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
 
-            {/* Step 2: Address Information */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="cellphoneNumber">Cellphone Number *</Label>
+                        <Input
+                          id="cellphoneNumber"
+                          value={formData.cellphoneNumber}
+                          onChange={(e) => handleInputChange("cellphoneNumber", e.target.value)}
+                          placeholder="e.g., 0821234567"
+                          disabled={loading}
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="alternativeNumber">Alternative Number</Label>
+                        <Input
+                          id="alternativeNumber"
+                          value={formData.alternativeNumber}
+                          onChange={(e) => handleInputChange("alternativeNumber", e.target.value)}
+                          placeholder="e.g., 0117654321"
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+               {/* Step 2: Address Information */}
             {currentStep === 2 && (
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Address Information</h3>
@@ -779,33 +920,51 @@ export default function PatientRegistrationPage() {
               </div>
             )}
 
-            {message && (
-              <div
-                className={`flex items-center gap-2 p-4 rounded-lg ${
-                  message.type === "success"
-                    ? "bg-green-50 text-green-700 border border-green-200"
-                    : "bg-red-50 text-red-700 border border-red-200"
-                }`}
-              >
-                {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                {message.text}
-              </div>
-            )}
+           
 
-            <div className="flex justify-between pt-6">
-              <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentStep === 1}>
-                Previous
-              </Button>
+                {message && (
+                  <div
+                    className={`flex items-center gap-2 p-4 rounded-lg ${
+                      message.type === "success"
+                        ? "bg-green-50 text-green-700 border border-green-200"
+                        : "bg-red-50 text-red-700 border border-red-200"
+                    }`}
+                  >
+                    {message.type === "success" ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                    {message.text}
+                  </div>
+                )}
 
-              {currentStep < 5 ? (
-                <Button type="button" onClick={handleNext}>
-                  Next
-                </Button>
-              ) : (
-                <Button type="submit">Register Patient</Button>
-              )}
-            </div>
-          </form>
+                <div className="flex justify-between pt-6">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handlePrevious} 
+                    disabled={currentStep === 1 || loading}
+                  >
+                    Previous
+                  </Button>
+
+                  {currentStep < 5 ? (
+                    <Button type="button" onClick={handleNext} disabled={loading}>
+                      Next
+                    </Button>
+                  ) : (
+                    <Button type="submit" disabled={loading}>
+                      {loading ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Registering...
+                        </div>
+                      ) : (
+                        "Register Patient"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
